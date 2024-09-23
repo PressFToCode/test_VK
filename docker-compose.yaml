@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    networks:
+      - airflow-net
+
+  webserver:
+    image: apache/airflow:2.10.1
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: 'true'
+    depends_on:
+      - postgres
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./input:/opt/airflow/input
+      - ./output:/opt/airflow/output
+      - ./intermediate:/opt/airflow/intermediate
+      - airflow-logs:/opt/airflow/logs
+    ports:
+      - "8080:8080"
+    networks:
+      - airflow-net
+    command: >
+      bash -c "airflow db upgrade &&
+               airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com &&
+               airflow webserver"
+
+  scheduler:
+    image: apache/airflow:2.10.1
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    depends_on:
+      - postgres
+      - webserver
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./input:/opt/airflow/input
+      - ./output:/opt/airflow/output
+      - ./intermediate:/opt/airflow/intermediate
+      - airflow-logs:/opt/airflow/logs
+    networks:
+      - airflow-net
+    command: "airflow scheduler"
+
+  worker:
+    image: apache/airflow:2.10.1
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    depends_on:
+      - postgres
+      - webserver
+      - scheduler
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts
+      - ./input:/opt/airflow/input
+      - ./output:/opt/airflow/output
+      - ./intermediate:/opt/airflow/intermediate
+      - airflow-logs:/opt/airflow/logs
+    networks:
+      - airflow-net
+    command: "airflow worker"
+
+networks:
+  airflow-net:
+    driver: bridge
+
+volumes:
+  postgres-db-volume:
+  airflow-logs:
